@@ -1,0 +1,1140 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SepsisPilot — ICU Decision Engine</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap" rel="stylesheet" />
+<style>
+/* ═══════════════════════════════════════════
+   DESIGN SYSTEM
+═══════════════════════════════════════════ */
+:root {
+  --bg:         #050810;
+  --bg2:        #080d1a;
+  --surface:    #0d1526;
+  --surface2:   #111e35;
+  --border:     #1a2d4a;
+  --border2:    #243d61;
+
+  --accent:     #00e5b0;
+  --accent-dim: rgba(0,229,176,0.12);
+  --red:        #ff4c6a;
+  --red-dim:    rgba(255,76,106,0.12);
+  --amber:      #ffb547;
+  --amber-dim:  rgba(255,181,71,0.12);
+  --blue:       #4d9fff;
+  --blue-dim:   rgba(77,159,255,0.12);
+
+  --text:       #dce8f5;
+  --text2:      #8ca3c0;
+  --text3:      #4a6480;
+
+  --mono: 'IBM Plex Mono', monospace;
+  --sans: 'Inter', sans-serif;
+
+  --radius: 10px;
+  --glow-green: 0 0 20px rgba(0,229,176,0.15);
+  --glow-red:   0 0 20px rgba(255,76,106,0.15);
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--sans);
+  font-size: 14px;
+  min-height: 100vh;
+  overflow-x: hidden;
+}
+
+/* Background grid texture */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(0,229,176,0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(0,229,176,0.02) 1px, transparent 1px);
+  background-size: 40px 40px;
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* ═══════════════════════════════════════════
+   LAYOUT
+═══════════════════════════════════════════ */
+.app { position: relative; z-index: 1; display: flex; flex-direction: column; min-height: 100vh; }
+
+header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 28px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(8,13,26,0.9);
+  backdrop-filter: blur(8px);
+  position: sticky; top: 0; z-index: 100;
+}
+
+.logo-group { display: flex; align-items: center; gap: 14px; }
+.logo-icon {
+  width: 38px; height: 38px;
+  background: linear-gradient(135deg, rgba(0,229,176,0.2), rgba(0,229,176,0.05));
+  border: 1px solid rgba(0,229,176,0.3);
+  border-radius: 10px;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 18px;
+  box-shadow: var(--glow-green);
+}
+.logo-text { font-family: var(--mono); font-size: 17px; font-weight: 700; color: var(--accent); letter-spacing: -0.5px; }
+.logo-sub  { font-size: 11px; color: var(--text3); margin-top: 1px; }
+
+.header-right { display: flex; align-items: center; gap: 16px; }
+.badge {
+  font-family: var(--mono);
+  font-size: 10px;
+  padding: 4px 9px;
+  border-radius: 5px;
+  background: var(--accent-dim);
+  border: 1px solid rgba(0,229,176,0.25);
+  color: var(--accent);
+  letter-spacing: 0.5px;
+}
+.server-status {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 11px; color: var(--text3);
+}
+.dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--red);
+}
+.dot.live { background: var(--accent); animation: pulse 2s infinite; }
+
+.main { display: grid; grid-template-columns: 280px 1fr 300px; gap: 0; flex: 1; }
+
+/* ═══════════════════════════════════════════
+   PANELS
+═══════════════════════════════════════════ */
+.panel { padding: 20px; border-right: 1px solid var(--border); }
+.panel:last-child { border-right: none; }
+
+.panel-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--text3);
+  margin-bottom: 18px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* ═══════════════════════════════════════════
+   LEFT PANEL — Task + Controls
+═══════════════════════════════════════════ */
+.left-panel { border-right: 1px solid var(--border); }
+
+.task-card {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+  cursor: pointer;
+  margin-bottom: 8px;
+  transition: all 0.18s;
+  position: relative;
+  overflow: hidden;
+}
+.task-card::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 3px;
+  border-radius: 2px 0 0 2px;
+}
+.task-card.easy::before   { background: var(--accent); }
+.task-card.medium::before { background: var(--amber); }
+.task-card.hard::before   { background: var(--red); }
+
+.task-card:hover { border-color: var(--border2); background: rgba(255,255,255,0.02); }
+.task-card.active {
+  border-color: rgba(0,229,176,0.35);
+  background: var(--accent-dim);
+  box-shadow: var(--glow-green);
+}
+.task-card.active.medium { border-color: rgba(255,181,71,0.35); background: var(--amber-dim); }
+.task-card.active.hard   { border-color: rgba(255,76,106,0.35); background: var(--red-dim); }
+
+.task-name { font-weight: 600; font-size: 13px; margin-bottom: 4px; }
+.task-desc { font-size: 11px; color: var(--text2); line-height: 1.45; }
+.task-diff {
+  display: inline-block;
+  font-family: var(--mono);
+  font-size: 9px;
+  padding: 2px 7px;
+  border-radius: 4px;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+.easy-badge   { background: rgba(0,229,176,0.1);  color: var(--accent); }
+.medium-badge { background: rgba(255,181,71,0.1); color: var(--amber); }
+.hard-badge   { background: rgba(255,76,106,0.1); color: var(--red); }
+
+.ctrl-section { margin-top: 20px; }
+
+.btn {
+  width: 100%;
+  padding: 11px 16px;
+  border-radius: var(--radius);
+  border: none;
+  font-family: var(--sans);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+  letter-spacing: 0.2px;
+}
+.btn-primary {
+  background: var(--accent);
+  color: #021a12;
+  margin-bottom: 8px;
+}
+.btn-primary:hover { filter: brightness(1.1); box-shadow: var(--glow-green); }
+.btn-secondary {
+  background: transparent;
+  color: var(--text2);
+  border: 1px solid var(--border2);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.seed-row { display: flex; gap: 8px; margin-bottom: 8px; }
+.seed-input {
+  flex: 1;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 8px;
+  padding: 9px 12px;
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 13px;
+}
+.seed-input:focus { outline: none; border-color: var(--accent); }
+.seed-label { font-size: 11px; color: var(--text3); margin-bottom: 6px; }
+
+/* Episode stats */
+.stat-row {
+  display: flex; justify-content: space-between; align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+}
+.stat-row:last-child { border-bottom: none; }
+.stat-label { font-size: 11px; color: var(--text3); }
+.stat-value { font-family: var(--mono); font-size: 13px; font-weight: 600; }
+.stat-value.green { color: var(--accent); }
+.stat-value.red   { color: var(--red); }
+.stat-value.amber { color: var(--amber); }
+
+/* ═══════════════════════════════════════════
+   CENTER PANEL — Vitals + Waveform + Actions
+═══════════════════════════════════════════ */
+.center-panel { padding: 20px 24px; border-right: 1px solid var(--border); }
+
+/* Patient status banner */
+.patient-banner {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 14px 18px;
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  margin-bottom: 20px;
+}
+.patient-id { font-family: var(--mono); font-size: 13px; font-weight: 700; color: var(--accent); }
+.patient-meta { font-size: 11px; color: var(--text3); }
+.status-pill {
+  margin-left: auto;
+  padding: 5px 14px;
+  border-radius: 999px;
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+}
+.pill-idle   { background: var(--surface2); color: var(--text3); border: 1px solid var(--border2); }
+.pill-active { background: var(--accent-dim); color: var(--accent); border: 1px solid rgba(0,229,176,0.3); }
+.pill-stable { background: rgba(0,229,176,0.15); color: var(--accent); border: 1px solid rgba(0,229,176,0.4); }
+.pill-dead   { background: var(--red-dim); color: var(--red); border: 1px solid rgba(255,76,106,0.4); }
+
+/* Vitals 6-grid */
+.vitals-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.vital-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  transition: border-color 0.3s;
+  position: relative;
+  overflow: hidden;
+}
+.vital-card::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 2px;
+  border-radius: 0 0 var(--radius) var(--radius);
+  transition: background 0.3s;
+}
+.vital-card.ok    { border-color: rgba(0,229,176,0.2); }
+.vital-card.ok::after    { background: var(--accent); }
+.vital-card.warn  { border-color: rgba(255,181,71,0.25); }
+.vital-card.warn::after  { background: var(--amber); }
+.vital-card.crit  { border-color: rgba(255,76,106,0.3); }
+.vital-card.crit::after  { background: var(--red); }
+
+.vital-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.vital-label  { font-size: 10px; color: var(--text3); letter-spacing: 0.5px; text-transform: uppercase; }
+.vital-target { font-size: 9px; color: var(--text3); font-family: var(--mono); }
+
+.vital-value  { font-family: var(--mono); font-size: 26px; font-weight: 700; line-height: 1; }
+.vital-value.ok   { color: var(--accent); }
+.vital-value.warn { color: var(--amber); }
+.vital-value.crit { color: var(--red); }
+.vital-unit   { font-size: 10px; color: var(--text3); margin-top: 3px; }
+
+.vital-bar { height: 3px; background: var(--border); border-radius: 2px; margin-top: 10px; }
+.vital-fill { height: 3px; border-radius: 2px; transition: width 0.5s ease; }
+.fill-ok   { background: var(--accent); }
+.fill-warn { background: var(--amber); }
+.fill-crit { background: var(--red); }
+
+.vital-delta {
+  font-family: var(--mono);
+  font-size: 10px;
+  margin-top: 4px;
+}
+.delta-up   { color: var(--red); }
+.delta-down { color: var(--accent); }
+.delta-flat { color: var(--text3); }
+
+/* Sparkline / waveform canvas */
+.waveform-section { margin-bottom: 20px; }
+.waveform-label {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 8px;
+}
+.waveform-wrap {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+canvas { display: block; width: 100%; }
+
+/* SOFA meter */
+.sofa-section {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+.sofa-card, .ep-reward-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.mini-label { font-size: 10px; color: var(--text3); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+.big-num { font-family: var(--mono); font-size: 32px; font-weight: 700; }
+
+/* Actions grid */
+.actions-section-title {
+  font-family: var(--mono);
+  font-size: 9px;
+  color: var(--text3);
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  margin-bottom: 12px;
+}
+.actions-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.action-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px 8px;
+  color: var(--text);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-align: center;
+  font-family: var(--sans);
+  font-size: 11px;
+  line-height: 1.4;
+}
+.action-btn:hover {
+  border-color: rgba(0,229,176,0.4);
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+.action-btn.fired {
+  border-color: var(--accent);
+  background: var(--accent-dim);
+  color: var(--accent);
+  box-shadow: var(--glow-green);
+}
+.action-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.action-icon { font-size: 16px; display: block; margin-bottom: 5px; }
+.action-name { font-weight: 600; font-size: 11px; }
+.action-desc { font-size: 9px; color: var(--text3); margin-top: 2px; }
+.action-btn.fired .action-desc { color: rgba(0,229,176,0.6); }
+
+/* ═══════════════════════════════════════════
+   RIGHT PANEL — Log + Score
+═══════════════════════════════════════════ */
+.right-panel { padding: 20px; overflow: hidden; display: flex; flex-direction: column; }
+
+.score-section { margin-bottom: 20px; }
+.score-display {
+  font-family: var(--mono);
+  font-size: 42px;
+  font-weight: 700;
+  color: var(--accent);
+  line-height: 1;
+  margin-bottom: 8px;
+}
+.score-display.bad { color: var(--red); }
+.score-sub { font-size: 11px; color: var(--text3); }
+
+.score-bar { height: 6px; background: var(--border); border-radius: 3px; margin: 10px 0; }
+.score-fill {
+  height: 6px; border-radius: 3px;
+  background: linear-gradient(90deg, var(--accent), #00ff9d);
+  transition: width 0.6s ease;
+  box-shadow: 0 0 8px rgba(0,229,176,0.4);
+}
+
+/* Grader breakdown */
+.grader-metrics { margin-bottom: 20px; }
+.metric-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 7px 0;
+  border-bottom: 1px solid rgba(26,45,74,0.6);
+  font-size: 11px;
+}
+.metric-row:last-child { border-bottom: none; }
+.metric-name { color: var(--text2); }
+.metric-val { font-family: var(--mono); font-weight: 600; }
+
+/* Step log */
+.log-wrap { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.log-box {
+  flex: 1;
+  background: var(--bg2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 12px;
+  overflow-y: auto;
+  font-family: var(--mono);
+  font-size: 10px;
+  line-height: 1.7;
+  color: var(--text3);
+  min-height: 180px;
+  max-height: 300px;
+}
+.log-box::-webkit-scrollbar { width: 4px; }
+.log-box::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+.log-entry { border-bottom: 1px solid rgba(26,45,74,0.4); padding: 3px 0; }
+.log-step-num { color: var(--blue); }
+.log-action   { color: var(--text2); }
+.log-reward-pos { color: var(--accent); }
+.log-reward-neg { color: var(--red); }
+.log-done     { color: var(--amber); }
+.log-system   { color: rgba(0,229,176,0.5); }
+
+/* ═══════════════════════════════════════════
+   ANIMATIONS
+═══════════════════════════════════════════ */
+@keyframes pulse { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.5;transform:scale(0.85)} }
+@keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:translateY(0)} }
+@keyframes slideIn { from{transform:translateX(-8px);opacity:0} to{transform:translateX(0);opacity:1} }
+
+.vital-card { animation: fadeIn 0.3s ease; }
+
+.flicker { animation: pulse 0.4s ease 2; }
+
+/* ═══════════════════════════════════════════
+   RESPONSIVE
+═══════════════════════════════════════════ */
+@media (max-width: 1100px) {
+  .main { grid-template-columns: 260px 1fr; }
+  .right-panel { display: none; }
+}
+@media (max-width: 800px) {
+  .main { grid-template-columns: 1fr; }
+  .left-panel { border-right: none; border-bottom: 1px solid var(--border); }
+  .vitals-grid { grid-template-columns: repeat(2, 1fr); }
+  .actions-grid { grid-template-columns: repeat(2, 1fr); }
+}
+</style>
+</head>
+<body>
+<div class="app">
+
+<!-- ═══ HEADER ═══ -->
+<header>
+  <div class="logo-group">
+    <div class="logo-icon">🫀</div>
+    <div>
+      <div class="logo-text">SepsisPilot</div>
+      <div class="logo-sub">ICU Treatment Decision Engine</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div class="server-status">
+      <div class="dot" id="server-dot"></div>
+      <span id="server-label">Connecting…</span>
+    </div>
+    <div class="badge">OPENENV v1.0</div>
+    <div class="badge" style="background:var(--blue-dim);border-color:rgba(77,159,255,0.25);color:var(--blue)">HACKATHON 2026</div>
+  </div>
+</header>
+
+<!-- ═══ MAIN ═══ -->
+<div class="main">
+
+  <!-- ─── LEFT PANEL ─── -->
+  <div class="panel left-panel">
+    <div class="panel-title">Select Scenario</div>
+
+    <div class="task-card easy active" id="task-mild" onclick="selectTask('mild_sepsis','easy')">
+      <span class="task-diff easy-badge">Easy</span>
+      <div class="task-name">Mild Sepsis</div>
+      <div class="task-desc">Gram-negative UTI. Broad-spectrum ABx optimal. 24-step episode.</div>
+    </div>
+
+    <div class="task-card medium" id="task-shock" onclick="selectTask('septic_shock','medium')">
+      <span class="task-diff medium-badge">Medium</span>
+      <div class="task-name">Septic Shock</div>
+      <div class="task-desc">Gram-positive bacteraemia (MRSA). Vasopressors mandatory. 48-step episode.</div>
+    </div>
+
+    <div class="task-card hard" id="task-mods" onclick="selectTask('severe_mods','hard')">
+      <span class="task-diff hard-badge">Hard</span>
+      <div class="task-name">Severe MODS</div>
+      <div class="task-desc">Multi-organ dysfunction. Mixed resistant infection. Precise AB sequencing required. 72-step episode.</div>
+    </div>
+
+    <div class="ctrl-section">
+      <div class="seed-label">Random Seed</div>
+      <div class="seed-row">
+        <input class="seed-input" type="number" id="seed-input" value="42" min="0" max="9999" />
+        <button class="btn btn-secondary" onclick="setSeed(Math.floor(Math.random()*9999))" title="Random seed" style="width:44px;padding:9px;">🎲</button>
+      </div>
+      <button class="btn btn-primary" onclick="doReset()" id="reset-btn">↺ &nbsp;Start Episode</button>
+      <button class="btn btn-secondary" onclick="autoPlay()" id="auto-btn">▶ &nbsp;Auto-Play (Heuristic)</button>
+    </div>
+
+    <div style="margin-top:20px">
+      <div class="panel-title">Episode Stats</div>
+      <div class="stat-row">
+        <span class="stat-label">Task</span>
+        <span class="stat-value" id="s-task">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Step</span>
+        <span class="stat-value" id="s-step">— / —</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Cumulative Reward</span>
+        <span class="stat-value" id="s-reward">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Alive</span>
+        <span class="stat-value green" id="s-alive">—</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Stabilized at step</span>
+        <span class="stat-value green" id="s-stab">—</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ─── CENTER PANEL ─── -->
+  <div class="panel center-panel">
+
+    <!-- Patient banner -->
+    <div class="patient-banner">
+      <div>
+        <div class="patient-id" id="patient-id">ICU-0000</div>
+        <div class="patient-meta" id="patient-meta">Select a task and press Start Episode</div>
+      </div>
+      <div class="status-pill pill-idle" id="status-pill">IDLE</div>
+    </div>
+
+    <!-- Vitals grid -->
+    <div class="vitals-grid">
+      <div class="vital-card" id="card-map">
+        <div class="vital-header">
+          <div class="vital-label">MAP</div>
+          <div class="vital-target">goal ≥ 65</div>
+        </div>
+        <div class="vital-value" id="v-map">—</div>
+        <div class="vital-unit">mmHg</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-map" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-map"></div>
+      </div>
+      <div class="vital-card" id="card-lac">
+        <div class="vital-header">
+          <div class="vital-label">Lactate</div>
+          <div class="vital-target">goal &lt; 2.0</div>
+        </div>
+        <div class="vital-value" id="v-lac">—</div>
+        <div class="vital-unit">mmol/L</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-lac" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-lac"></div>
+      </div>
+      <div class="vital-card" id="card-wbc">
+        <div class="vital-header">
+          <div class="vital-label">WBC</div>
+          <div class="vital-target">goal 4–12</div>
+        </div>
+        <div class="vital-value" id="v-wbc">—</div>
+        <div class="vital-unit">k/uL</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-wbc" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-wbc"></div>
+      </div>
+      <div class="vital-card" id="card-temp">
+        <div class="vital-header">
+          <div class="vital-label">Temperature</div>
+          <div class="vital-target">goal 36–38°C</div>
+        </div>
+        <div class="vital-value" id="v-temp">—</div>
+        <div class="vital-unit">°C</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-temp" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-temp"></div>
+      </div>
+      <div class="vital-card" id="card-hr">
+        <div class="vital-header">
+          <div class="vital-label">Heart Rate</div>
+          <div class="vital-target">goal &lt; 100</div>
+        </div>
+        <div class="vital-value" id="v-hr">—</div>
+        <div class="vital-unit">bpm</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-hr" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-hr"></div>
+      </div>
+      <div class="vital-card" id="card-cr">
+        <div class="vital-header">
+          <div class="vital-label">Creatinine</div>
+          <div class="vital-target">goal &lt; 1.2</div>
+        </div>
+        <div class="vital-value" id="v-cr">—</div>
+        <div class="vital-unit">mg/dL</div>
+        <div class="vital-bar"><div class="vital-fill" id="b-cr" style="width:0%"></div></div>
+        <div class="vital-delta" id="d-cr"></div>
+      </div>
+    </div>
+
+    <!-- Waveform -->
+    <div class="waveform-section">
+      <div class="waveform-label">MAP Trajectory</div>
+      <div class="waveform-wrap">
+        <canvas id="waveform-canvas" height="70"></canvas>
+      </div>
+    </div>
+
+    <!-- SOFA + Reward -->
+    <div class="sofa-section">
+      <div class="sofa-card">
+        <div class="mini-label">SOFA Score</div>
+        <div class="big-num" id="sofa-num" style="color:var(--amber)">—</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">/ 24 &nbsp;·&nbsp; higher = worse</div>
+      </div>
+      <div class="ep-reward-card">
+        <div class="mini-label">Episode Reward</div>
+        <div class="big-num" id="ep-reward" style="color:var(--blue)">—</div>
+        <div style="font-size:10px;color:var(--text3);margin-top:4px">cumulative</div>
+      </div>
+    </div>
+
+    <!-- Actions -->
+    <div class="actions-section-title">Treatment Actions</div>
+    <div class="actions-grid" id="actions-grid">
+      <button class="action-btn" id="a0" onclick="doStep(0)">
+        <span class="action-icon">🚫</span>
+        <div class="action-name">No Treatment</div>
+        <div class="action-desc">Watchful waiting</div>
+      </button>
+      <button class="action-btn" id="a1" onclick="doStep(1)">
+        <span class="action-icon">💊</span>
+        <div class="action-name">Broad AB</div>
+        <div class="action-desc">pip-tazo · gram-neg</div>
+      </button>
+      <button class="action-btn" id="a2" onclick="doStep(2)">
+        <span class="action-icon">💉</span>
+        <div class="action-name">Narrow AB</div>
+        <div class="action-desc">vancomycin · MRSA</div>
+      </button>
+      <button class="action-btn" id="a3" onclick="doStep(3)">
+        <span class="action-icon">📈</span>
+        <div class="action-name">Low Vasopressor</div>
+        <div class="action-desc">0.1 mcg/kg/min NE</div>
+      </button>
+      <button class="action-btn" id="a4" onclick="doStep(4)">
+        <span class="action-icon">⬆️</span>
+        <div class="action-name">High Vasopressor</div>
+        <div class="action-desc">0.3 mcg/kg/min · ⚠ renal</div>
+      </button>
+      <button class="action-btn" id="a5" onclick="doStep(5)">
+        <span class="action-icon">💊📈</span>
+        <div class="action-name">Broad + Low VP</div>
+        <div class="action-desc">combined therapy</div>
+      </button>
+      <button class="action-btn" id="a6" onclick="doStep(6)">
+        <span class="action-icon">💊⬆️</span>
+        <div class="action-name">Broad + High VP</div>
+        <div class="action-desc">aggressive · ⚠ renal</div>
+      </button>
+      <button class="action-btn" id="a7" onclick="doStep(7)">
+        <span class="action-icon">💉📈</span>
+        <div class="action-name">Narrow + Low VP</div>
+        <div class="action-desc">MRSA + haemodynamic</div>
+      </button>
+      <button class="action-btn" id="a8" onclick="doStep(8)">
+        <span class="action-icon">💉⬆️</span>
+        <div class="action-name">Narrow + High VP</div>
+        <div class="action-desc">max intensity · ⚠ renal</div>
+      </button>
+    </div>
+  </div>
+
+  <!-- ─── RIGHT PANEL ─── -->
+  <div class="panel right-panel">
+    <div class="panel-title">Episode Score</div>
+
+    <div class="score-section">
+      <div class="score-display" id="score-display">—</div>
+      <div class="score-sub" id="score-sub">Start an episode to see score</div>
+      <div class="score-bar">
+        <div class="score-fill" id="score-fill" style="width:0%"></div>
+      </div>
+    </div>
+
+    <div class="panel-title">Grader Breakdown</div>
+    <div class="grader-metrics" id="grader-metrics">
+      <div class="metric-row"><span class="metric-name" style="color:var(--text3);font-style:italic">Complete episode to see metrics</span></div>
+    </div>
+
+    <div class="panel-title" style="margin-top:auto">Step Log</div>
+    <div class="log-wrap">
+      <div class="log-box" id="log-box">
+        <div class="log-entry log-system">▶ SepsisPilot OpenEnv initialized</div>
+        <div class="log-entry log-system">▶ Select a task and press Start Episode</div>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /main -->
+</div><!-- /app -->
+
+<script>
+/* ═══════════════════════════════════════════
+   STATE
+═══════════════════════════════════════════ */
+const BASE = '';   // same-origin (change to http://localhost:7860 if serving separately)
+let currentTask  = 'mild_sepsis';
+let episodeDone  = false;
+let lastVitals   = null;
+let prevVitals   = null;
+let mapHistory   = [];
+let autoTimer    = null;
+let episodeCount = 0;
+
+/* ═══════════════════════════════════════════
+   SERVER PING
+═══════════════════════════════════════════ */
+async function ping() {
+  try {
+    const r = await fetch(BASE + '/health', {signal: AbortSignal.timeout(3000)});
+    const ok = r.ok;
+    document.getElementById('server-dot').className   = 'dot' + (ok ? ' live' : '');
+    document.getElementById('server-label').textContent = ok ? 'Server live' : 'Server error';
+  } catch {
+    document.getElementById('server-dot').className    = 'dot';
+    document.getElementById('server-label').textContent = 'Server offline';
+  }
+}
+ping();
+setInterval(ping, 8000);
+
+/* ═══════════════════════════════════════════
+   TASK SELECT
+═══════════════════════════════════════════ */
+function selectTask(t, diff) {
+  currentTask = t;
+  document.querySelectorAll('.task-card').forEach(c => c.classList.remove('active'));
+  const map = {mild_sepsis: 'task-mild', septic_shock: 'task-shock', severe_mods: 'task-mods'};
+  document.getElementById(map[t]).classList.add('active');
+}
+
+function setSeed(v) {
+  document.getElementById('seed-input').value = v;
+}
+
+/* ═══════════════════════════════════════════
+   RESET
+═══════════════════════════════════════════ */
+async function doReset() {
+  stopAuto();
+  const seed = parseInt(document.getElementById('seed-input').value) || 42;
+  episodeCount++;
+  try {
+    const r = await fetch(BASE + '/reset', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({task: currentTask, seed})
+    });
+    if (!r.ok) { logSystem('ERROR: ' + await r.text()); return; }
+    const state = await r.json();
+    episodeDone = false;
+    prevVitals  = null;
+    lastVitals  = state.vitals;
+    mapHistory  = [state.vitals.map_mmhg];
+
+    updateVitals(state);
+    updateStats(state, null);
+    setStatus('active');
+    clearGrader();
+    logSystem(`Episode #${episodeCount} started — task: ${currentTask} — seed: ${seed}`);
+    document.getElementById('score-display').textContent = '—';
+    document.getElementById('score-display').className   = 'score-display';
+    document.getElementById('score-sub').textContent     = 'Episode in progress…';
+    document.getElementById('score-fill').style.width    = '0%';
+    setActionsEnabled(true);
+  } catch(e) { logSystem('FETCH ERROR: ' + e.message); }
+}
+
+/* ═══════════════════════════════════════════
+   STEP
+═══════════════════════════════════════════ */
+async function doStep(action) {
+  if (episodeDone) { logSystem('Episode done — press Start Episode'); return; }
+  try {
+    const r = await fetch(BASE + '/step', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({action})
+    });
+    if (!r.ok) { logSystem('STEP ERROR: ' + await r.text()); return; }
+    const result = await r.json();
+
+    prevVitals = lastVitals;
+    lastVitals = result.state.vitals;
+    mapHistory.push(result.state.vitals.map_mmhg);
+    if (mapHistory.length > 60) mapHistory.shift();
+
+    updateVitals(result.state);
+    updateStats(result.state, result.reward);
+    logStep(result.state.step, action, result.reward, result.done);
+    highlightAction(action);
+    drawWaveform();
+
+    if (result.done) {
+      episodeDone = true;
+      stopAuto();
+      setActionsEnabled(false);
+      const alive = result.state.alive;
+      setStatus(alive ? 'stable' : 'dead');
+      await fetchGrade();
+    }
+  } catch(e) { logSystem('FETCH ERROR: ' + e.message); }
+}
+
+/* ═══════════════════════════════════════════
+   GRADE
+═══════════════════════════════════════════ */
+async function fetchGrade() {
+  try {
+    const r = await fetch(BASE + '/grade');
+    if (!r.ok) return;
+    const g = await r.json();
+    const pct = (g.score * 100).toFixed(1);
+    const disp = document.getElementById('score-display');
+    disp.textContent = pct + '%';
+    disp.className   = 'score-display' + (g.score < 0.3 ? ' bad' : '');
+    document.getElementById('score-sub').textContent  = g.reason;
+    document.getElementById('score-fill').style.width = pct + '%';
+    renderGraderMetrics(g.metrics);
+    logSystem(`GRADE → score=${g.score.toFixed(4)} | passed=${g.passed}`);
+  } catch(e) { logSystem('GRADE ERROR: ' + e.message); }
+}
+
+function renderGraderMetrics(metrics) {
+  const el = document.getElementById('grader-metrics');
+  el.innerHTML = Object.entries(metrics).map(([k, v]) => {
+    const nice = k.replace(/_/g,' ');
+    const val  = typeof v === 'number' ? v.toFixed(3) : v;
+    const color = v >= 0.7 ? 'var(--accent)' : v >= 0.4 ? 'var(--amber)' : 'var(--red)';
+    return `<div class="metric-row">
+      <span class="metric-name">${nice}</span>
+      <span class="metric-val" style="color:${color}">${val}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ═══════════════════════════════════════════
+   AUTO-PLAY (heuristic: broad+low vaso if MAP<65 else broad AB)
+═══════════════════════════════════════════ */
+function autoPlay() {
+  if (episodeDone) { doReset().then(() => setTimeout(startAuto, 400)); return; }
+  startAuto();
+}
+function startAuto() {
+  if (autoTimer) return;
+  document.getElementById('auto-btn').textContent = '⏹ Stop Auto';
+  autoTimer = setInterval(async () => {
+    if (episodeDone) { stopAuto(); return; }
+    const v = lastVitals;
+    let action = 1;  // default: broad AB
+    if (v) {
+      const mapLow = v.map_mmhg < 65;
+      action = mapLow ? 5 : 1;   // broad+low vaso if MAP low, else broad AB
+    }
+    await doStep(action);
+  }, 600);
+}
+function stopAuto() {
+  if (autoTimer) { clearInterval(autoTimer); autoTimer = null; }
+  document.getElementById('auto-btn').textContent = '▶ Auto-Play (Heuristic)';
+}
+
+/* ═══════════════════════════════════════════
+   UI UPDATES
+═══════════════════════════════════════════ */
+function updateVitals(state) {
+  const v = state.vitals;
+  setVital('map',  v.map_mmhg,    65,  100,  40,  160,  false);
+  setVital('lac',  v.lactate,     0.5, 2.0,  0.1, 15,   true);
+  setVital('wbc',  v.wbc,         4,   12,   0.5, 35,   false);
+  setVital('temp', v.temperature, 36.5,38.0, 33,  42,   false);
+  setVital('hr',   v.heart_rate,  60,  100,  20,  165,  false);
+  setVital('cr',   v.creatinine,  0.6, 1.2,  0.3, 10,   false);
+
+  document.getElementById('sofa-num').textContent = v.sofa_score.toFixed(1);
+  const sc = v.sofa_score;
+  document.getElementById('sofa-num').style.color = sc < 5 ? 'var(--accent)' : sc < 10 ? 'var(--amber)' : 'var(--red)';
+
+  document.getElementById('patient-id').textContent   = `ICU-${String(episodeCount).padStart(4,'0')}`;
+  document.getElementById('patient-meta').textContent = `${currentTask.replace(/_/g,' ')} · Step ${state.step} / ${state.max_steps}`;
+}
+
+function setVital(id, value, goodMin, goodMax, absMin, absMax, invertBad) {
+  const el   = document.getElementById('v-' + id);
+  const bar  = document.getElementById('b-' + id);
+  const card = document.getElementById('card-' + id);
+  const delt = document.getElementById('d-' + id);
+
+  const good = value >= goodMin && value <= goodMax;
+  const mild = !good && ((value >= goodMin * 0.85 && !invertBad) || (value <= goodMax * 1.2 && invertBad));
+
+  const cls  = good ? 'ok' : mild ? 'warn' : 'crit';
+  el.className  = 'vital-value ' + cls;
+  card.className = 'vital-card ' + cls;
+
+  const dp = id === 'temp' ? 1 : id === 'lac' || id === 'cr' ? 2 : 1;
+  el.textContent = value.toFixed(dp);
+
+  const pct = Math.max(0, Math.min(100, ((value - absMin) / (absMax - absMin)) * 100));
+  bar.style.width = pct + '%';
+  bar.className   = 'vital-fill fill-' + cls;
+
+  // Delta vs previous
+  if (prevVitals) {
+    const prev = getVitalVal(id, prevVitals);
+    const diff = value - prev;
+    if (Math.abs(diff) > 0.05) {
+      const up = diff > 0;
+      // For MAP, HR: up = bad for HR if too high, up = good for MAP; simplify to raw direction
+      const isGoodDirection = id === 'map' ? up : id === 'lac' || id === 'cr' ? !up : !up;
+      delt.className   = 'vital-delta ' + (isGoodDirection ? 'delta-down' : 'delta-up');
+      delt.textContent = (diff > 0 ? '▲ +' : '▼ ') + diff.toFixed(dp);
+    } else {
+      delt.textContent = '→ stable';
+      delt.className   = 'vital-delta delta-flat';
+    }
+  }
+}
+
+function getVitalVal(id, v) {
+  const map = {map: 'map_mmhg', lac: 'lactate', wbc: 'wbc', temp: 'temperature', hr: 'heart_rate', cr: 'creatinine'};
+  return v[map[id]] ?? 0;
+}
+
+function updateStats(state, reward) {
+  document.getElementById('s-task').textContent   = state.task.replace(/_/g,' ');
+  document.getElementById('s-step').textContent   = `${state.step} / ${state.max_steps}`;
+  const er = state.episode_reward;
+  const rew = document.getElementById('s-reward');
+  rew.textContent  = er >= 0 ? '+' + er.toFixed(2) : er.toFixed(2);
+  rew.className    = 'stat-value ' + (er >= 0 ? 'green' : 'red');
+  document.getElementById('s-alive').textContent  = state.alive ? '✓ Yes' : '✗ Dead';
+  document.getElementById('s-alive').className    = 'stat-value ' + (state.alive ? 'green' : 'red');
+  document.getElementById('s-stab').textContent   = state.stabilized_at != null ? `Step ${state.stabilized_at}` : '—';
+  document.getElementById('ep-reward').textContent = er >= 0 ? '+' + er.toFixed(1) : er.toFixed(1);
+  document.getElementById('ep-reward').style.color = er >= 0 ? 'var(--accent)' : 'var(--red)';
+}
+
+function setStatus(s) {
+  const el = document.getElementById('status-pill');
+  const map = {
+    idle:   ['IDLE',      'pill-idle'],
+    active: ['● LIVE',    'pill-active'],
+    stable: ['✓ STABLE',  'pill-stable'],
+    dead:   ['✗ DEAD',    'pill-dead'],
+  };
+  const [text, cls] = map[s] || map.idle;
+  el.textContent = text;
+  el.className   = 'status-pill ' + cls;
+}
+
+function setActionsEnabled(enabled) {
+  document.querySelectorAll('.action-btn').forEach(b => b.disabled = !enabled);
+}
+
+function highlightAction(action) {
+  document.querySelectorAll('.action-btn').forEach((b, i) => {
+    b.classList.toggle('fired', i === action);
+  });
+}
+
+function clearGrader() {
+  document.getElementById('grader-metrics').innerHTML =
+    '<div class="metric-row"><span class="metric-name" style="color:var(--text3);font-style:italic">Complete episode to see metrics</span></div>';
+}
+
+/* ═══════════════════════════════════════════
+   WAVEFORM CANVAS
+═══════════════════════════════════════════ */
+function drawWaveform() {
+  const canvas = document.getElementById('waveform-canvas');
+  const ctx    = canvas.getContext('2d');
+  const W = canvas.offsetWidth;
+  const H = 70;
+  canvas.width  = W;
+  canvas.height = H;
+
+  ctx.clearRect(0, 0, W, H);
+
+  // Goal line at MAP=65
+  const goalY = H - ((65 - 30) / (130 - 30)) * H;
+  ctx.setLineDash([4, 4]);
+  ctx.strokeStyle = 'rgba(0,229,176,0.25)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, goalY); ctx.lineTo(W, goalY); ctx.stroke();
+  ctx.setLineDash([]);
+
+  if (mapHistory.length < 2) return;
+
+  const data = mapHistory;
+  const n    = data.length;
+  const xStep = W / Math.max(n - 1, 1);
+
+  // Gradient fill
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,   'rgba(0,229,176,0.25)');
+  grad.addColorStop(1,   'rgba(0,229,176,0)');
+
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * xStep;
+    const y = H - ((Math.min(130, Math.max(30, v)) - 30) / 100) * H;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineTo((n - 1) * xStep, H);
+  ctx.lineTo(0, H);
+  ctx.closePath();
+  ctx.fillStyle = grad;
+  ctx.fill();
+
+  // Line
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i * xStep;
+    const y = H - ((Math.min(130, Math.max(30, v)) - 30) / 100) * H;
+    const last = data[n - 1];
+    ctx.strokeStyle = last >= 65 ? 'var(--accent)' : last >= 50 ? 'var(--amber)' : 'var(--red)';
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  // Current dot
+  const last = data[n - 1];
+  const lx = (n - 1) * xStep;
+  const ly = H - ((Math.min(130, Math.max(30, last)) - 30) / 100) * H;
+  ctx.beginPath();
+  ctx.arc(lx, ly, 4, 0, Math.PI * 2);
+  ctx.fillStyle = last >= 65 ? 'var(--accent)' : 'var(--red)';
+  ctx.fill();
+
+  // Goal label
+  ctx.font = '9px IBM Plex Mono';
+  ctx.fillStyle = 'rgba(0,229,176,0.4)';
+  ctx.fillText('goal 65', 4, goalY - 4);
+}
+
+/* ═══════════════════════════════════════════
+   LOG
+═══════════════════════════════════════════ */
+function logStep(step, action, reward, done) {
+  const rCls = reward >= 0 ? 'log-reward-pos' : 'log-reward-neg';
+  const actionNames = ['no_tx','broad_ab','narrow_ab','low_vp','high_vp','broad+low','broad+high','narrow+low','narrow+high'];
+  const html =
+    `<span class="log-step-num">T=${String(step).padStart(2,'0')}</span> ` +
+    `<span class="log-action">act=${actionNames[action] ?? action}</span> ` +
+    `<span class="${rCls}">r=${reward >= 0 ? '+' : ''}${reward.toFixed(3)}</span>` +
+    (done ? ' <span class="log-done">DONE</span>' : '');
+  appendLog(html);
+}
+
+function logSystem(msg) {
+  appendLog(`<span class="log-system">▶ ${msg}</span>`);
+}
+
+function appendLog(html) {
+  const box  = document.getElementById('log-box');
+  const div  = document.createElement('div');
+  div.className = 'log-entry';
+  div.innerHTML = html;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+
+/* ═══════════════════════════════════════════
+   INIT
+═══════════════════════════════════════════ */
+setActionsEnabled(false);
+window.addEventListener('resize', drawWaveform);
+</script>
+</body>
+</html>

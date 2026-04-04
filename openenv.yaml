@@ -1,0 +1,166 @@
+name: SepsisPilot
+version: "1.0.0"
+description: >
+  Reinforcement learning environment for optimal sepsis treatment sequencing.
+  An AI agent observes ICU patient vitals (MAP, lactate, WBC, temperature,
+  heart rate, creatinine) and decides which antibiotic and vasopressor
+  combination to administer each hour. The environment models realistic
+  sepsis physiology including antibiotic resistance, multi-organ dysfunction,
+  and haemodynamic instability.
+
+  Built for the Meta PyTorch OpenEnv Hackathon 2026.
+
+tags:
+  - openenv
+  - healthcare
+  - reinforcement-learning
+  - sepsis
+  - icu
+  - medical-ai
+
+tasks:
+  - name: mild_sepsis
+    difficulty: easy
+    max_steps: 24
+    description: >
+      Mild sepsis from gram-negative UTI. Broad-spectrum antibiotics are the
+      correct choice. Vasopressors needed only if MAP < 65. Slow deterioration
+      gives the agent time to learn.
+
+  - name: septic_shock
+    difficulty: medium
+    max_steps: 48
+    description: >
+      Septic shock from gram-positive bacteraemia (MRSA). MAP critically low;
+      vasopressors are mandatory immediately. Narrow-spectrum antibiotics
+      (vancomycin) are optimal. Each delayed hour increases organ failure risk.
+
+  - name: severe_mods
+    difficulty: hard
+    max_steps: 72
+    description: >
+      Severe sepsis with Multi-Organ Dysfunction Syndrome. Mixed drug-resistant
+      infection requiring precise antibiotic sequencing: broad-spectrum first
+      to cover gram-negative load, then switch to narrow-spectrum. High-dose
+      vasopressors risk acute kidney injury. Antibiotic resistance accumulates
+      with repeated suboptimal choices.
+
+action_space:
+  type: discrete
+  n: 9
+  actions:
+    - id: 0
+      name: no_treatment
+      description: Watchful waiting — no intervention
+    - id: 1
+      name: broad_antibiotics
+      description: Broad-spectrum antibiotics (piperacillin-tazobactam)
+    - id: 2
+      name: narrow_antibiotics
+      description: Narrow-spectrum antibiotics (vancomycin)
+    - id: 3
+      name: low_vasopressor
+      description: Low-dose norepinephrine (0.1 mcg/kg/min)
+    - id: 4
+      name: high_vasopressor
+      description: High-dose norepinephrine (0.3 mcg/kg/min) — renal risk
+    - id: 5
+      name: broad_plus_low_vaso
+      description: Broad-spectrum antibiotics + low-dose vasopressor
+    - id: 6
+      name: broad_plus_high_vaso
+      description: Broad-spectrum antibiotics + high-dose vasopressor
+    - id: 7
+      name: narrow_plus_low_vaso
+      description: Narrow-spectrum antibiotics + low-dose vasopressor
+    - id: 8
+      name: narrow_plus_high_vaso
+      description: Narrow-spectrum antibiotics + high-dose vasopressor
+
+observation_space:
+  type: continuous
+  shape: [9]
+  fields:
+    - name: map_mmhg
+      description: Mean Arterial Pressure (mmHg). Sepsis goal ≥ 65.
+      range: [20.0, 160.0]
+    - name: lactate
+      description: Serum lactate (mmol/L). Normal 0.5–2.0; crisis > 4.
+      range: [0.1, 20.0]
+    - name: wbc
+      description: White blood cell count (k/uL). Normal 4–11.
+      range: [0.5, 40.0]
+    - name: temperature
+      description: Core body temperature (°C). Sepsis > 38 or < 36.
+      range: [33.0, 42.0]
+    - name: heart_rate
+      description: Heart rate (bpm). Sepsis > 90.
+      range: [20.0, 170.0]
+    - name: creatinine
+      description: Serum creatinine (mg/dL). AKI marker.
+      range: [0.3, 12.0]
+    - name: sofa_score
+      description: SOFA score (0–24). Organ failure composite.
+      range: [0.0, 24.0]
+    - name: resistance
+      description: Antibiotic resistance index (0–1). Hard task only.
+      range: [0.0, 1.0]
+    - name: step_fraction
+      description: Fraction of episode elapsed (step / max_steps).
+      range: [0.0, 1.0]
+
+reward:
+  type: dense
+  description: >
+    Reward is provided at every timestep (dense shaping), not just at
+    episode end. Each vital sign contributes incrementally:
+      +0.35 per step if MAP ≥ 65
+      +0.30 per step if lactate < 2.0
+      +0.10 per step if WBC in normal range
+      +0.08 per step if temperature normal
+      −0.025 per step (time pressure)
+      −8.0  on patient death
+      +5.0  on full stabilisation (all vitals normal)
+    Additionally, creatinine protection and resistance management
+    contribute in medium/hard tasks.
+  range: [-8.0, 5.775]
+
+grader:
+  type: composite
+  output_range: [0.0, 1.0]
+  components:
+    - survival (mandatory prerequisite)
+    - final vital sign normalisation
+    - stabilisation speed
+    - treatment appropriateness (correct antibiotic class)
+    - organ protection (renal function)
+    - resistance management (hard task)
+
+infrastructure:
+  runtime_limit_minutes: 20
+  vcpu: 2
+  memory_gb: 8
+  port: 7860
+
+api:
+  reset:   POST /reset
+  step:    POST /step
+  state:   GET  /state
+  grade:   GET  /grade
+  tasks:   GET  /tasks
+  health:  GET  /health
+
+environment_variables:
+  - name: API_BASE_URL
+    description: LLM endpoint base URL
+    default: "https://integrate.api.nvidia.com/v1"
+  - name: MODEL_NAME
+    description: LLM model identifier
+    default: "nvidia/llama-3.1-nemotron-70b-instruct"
+  - name: HF_TOKEN
+    description: Hugging Face API token
+  - name: OPENAI_API_KEY
+    description: API key for the LLM endpoint (OpenAI-compatible)
+  - name: ENV_BASE_URL
+    description: SepsisPilot environment server URL
+    default: "http://localhost:7860"
