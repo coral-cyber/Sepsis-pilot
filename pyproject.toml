@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "sepsispilot"
+version = "0.1.0"
+description = "Sepsis treatment sequencing RL agent for OpenEnv"
+requires-python = ">=3.10"
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "pydantic",
+    "numpy",
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["agent*", "env*", "tasks*"]
