@@ -151,7 +151,7 @@ def choose_action(
     history.append({"role": "user", "content": build_state_prompt(state)})
 
     try:
-        time.sleep(2)
+        time.sleep(6)
         response = llm_client.chat.completions.create(
             model=MODEL_NAME,
             messages=[{"role": "system", "content": SYSTEM_PROMPT}] + history[-6:],
@@ -204,6 +204,13 @@ def run_episode(
 
     while not done:
         action = choose_action(llm_client, state, history)
+
+        # Safety guard: never allow action 0 in critical tasks
+        task_critical = task in ("septic_shock", "severe_mods")
+        if task_critical and action == 0:
+            sys.stderr.write(f"[SAFETY] Blocked action=0 on {task}, overriding to action=5\n")
+            action = 5
+
         result = env_step(action)
 
         step        = result["state"]["step"]
@@ -227,7 +234,7 @@ def run_episode(
         if done:
             break
 
-        time.sleep(0.05)   # small delay to avoid rate-limiting
+        time.sleep(1)   # small delay to avoid rate-limiting
 
     # Fetch official grader score
     try:
