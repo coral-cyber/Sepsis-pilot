@@ -1,3 +1,14 @@
+---
+title: SepsisPilot
+emoji: 🫀
+colorFrom: red
+colorTo: blue
+sdk: docker
+sdk_version: "latest"
+python_version: "3.11"
+app_file: app.py
+pinned: false
+---
 # 🫀 SepsisPilot — OpenEnv
 
 > **Reinforcement learning environment for optimal sepsis treatment sequencing**  
