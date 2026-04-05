@@ -3,7 +3,7 @@ title: SepsisPilot
 emoji: 🫀
 colorFrom: red
 colorTo: blue
-sdk: docker
+sdk: gradio
 
 app_file: app.py
 pinned: false
