@@ -19,6 +19,7 @@ from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, HTTPException, Query
+from typing import Optional as Opt
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
 
@@ -64,8 +65,10 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 # ──────────────────────────────────────────────
 
 @app.post("/reset", response_model=PatientState, tags=["OpenEnv"])
-async def reset(body: ResetRequest):
+async def reset(body: Opt[ResetRequest] = None):
     """Reset the environment and begin a new episode."""
+    if body is None:
+        body = ResetRequest()
     if body.task not in AVAILABLE_TASKS:
         raise HTTPException(
             status_code=400,
