@@ -18,11 +18,16 @@ from .models import GraderResult, PatientVitals
 
 
 def _lerp_score(value: float, worst: float, best: float) -> float:
-    """Map a value linearly to [0, 1]. Clips to [0, 1]."""
+    """Map a value linearly to (0, 1) — strictly exclusive."""
     if best == worst:
         return 0.5
     s = (value - worst) / (best - worst)
-    return max(0.0, min(1.0, s))
+    return max(0.001, min(0.999, s))
+
+
+def _safe_score(score: float) -> float:
+    """Clamp final episode score to strictly (0, 1)."""
+    return round(max(0.001, min(0.999, score)), 4)
 
 
 def grade_mild_sepsis(
@@ -43,7 +48,7 @@ def grade_mild_sepsis(
     """
     if not alive or not trajectory:
         return GraderResult(
-            score=0.0,
+            score=0.001,
             reason="Patient died — episode score is 0.",
             metrics={"alive": 0.0},
             passed=False,
@@ -81,7 +86,7 @@ def grade_mild_sepsis(
         + 0.10 * wbc_score
         + 0.05 * speed_bonus
     )
-    score = round(max(0.0, min(1.0, score)), 4)
+    score = _safe_score(score)
 
     reason = (
         f"Patient alive. MAP={final.map_mmhg:.1f}, "
@@ -110,7 +115,7 @@ def grade_septic_shock(
     """
     if not alive or not trajectory:
         return GraderResult(
-            score=0.0,
+            score=0.001,
             reason="Patient died — episode score is 0.",
             metrics={"alive": 0.0},
             passed=False,
@@ -152,7 +157,7 @@ def grade_septic_shock(
         + 0.05 * vasopressor_score
         + 0.05 * speed_bonus
     )
-    score = round(max(0.0, min(1.0, score)), 4)
+    score = _safe_score(score)
 
     reason = (
         f"Patient alive. MAP={final.map_mmhg:.1f}, "
@@ -193,7 +198,7 @@ def grade_severe_mods(
     """
     if not alive or not trajectory:
         return GraderResult(
-            score=0.0,
+            score=0.001,
             reason="Patient died — episode score is 0.",
             metrics={"alive": 0.0},
             passed=False,
@@ -249,7 +254,7 @@ def grade_severe_mods(
         + 0.15 * renal_score
         + 0.10 * speed_bonus
     )
-    score = round(max(0.0, min(1.0, score)), 4)
+    score = _safe_score(score)
 
     reason = (
         f"Patient alive. MAP={final.map_mmhg:.1f}, "
